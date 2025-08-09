@@ -1,4 +1,4 @@
-# Automatizando_dados_py
+# Automatizando_dados_py(AUTALIZAÇÕES...)
 
 # Sistema de Cálculo de Materiais
 
@@ -10,167 +10,51 @@ Uma aplicação em **Python** com interface gráfica que permite carregar planil
 
 Este projeto usa os seguintes recursos:
 
-* **Objetos e Classes (OOP)** para organizar o programa de forma clara e modular.
-* **Pandas** para ler e manipular dados de planilhas Excel.
-* **Tkinter + ttk** para criar a interface gráfica interativa.
-* **difflib.get\_close\_matches** para busca por similaridade de texto.
+---
+
+### Automação de Correspondência de Planilhas com RapidFuzz
+
+Este script Python foi desenvolvido para automatizar a busca e extração de dados entre duas planilhas do Excel. Diferente de um preenchimento direto, ele age como um motor de busca, que percorre uma planilha de referência (`file_referencia`), encontra a melhor correspondência em uma planilha de orçamento (`file_orcamento`) e, para cada item encontrado, cria um objeto estruturado com as informações correspondentes.
+
+#### Como o Script Funciona: O Passo a Passo
+
+1.  **Configuração Inicial**: O script começa importando as bibliotecas `pandas` (para leitura e manipulação das planilhas) e `rapidfuzz` (para o algoritmo de correspondência de texto). Ele também define os caminhos dos arquivos e trata possíveis erros caso as planilhas não sejam encontradas.
+2.  **Preparação dos Dados**: As planilhas são lidas e carregadas em DataFrames do pandas. Em seguida, as descrições da **coluna B** de ambas as planilhas são extraídas em listas separadas. Essa etapa é crucial, pois essas listas são a base para a comparação de texto.
+3.  **Processo de Correspondência (O "Match")**: Este é o coração do script. O código percorre cada descrição da sua planilha de referência e busca a correspondência mais próxima na lista de descrições da planilha de orçamento.
+4.  **Criação dos Objetos**: Para cada correspondência que atende a um critério de similaridade, o script coleta os dados específicos (Descrição, Unidade de Medida, Valores, etc.) da linha correspondente na planilha de **referência** e armazena-os em um dicionário. Cada um desses dicionários é um "objeto" que contém as informações que você solicitou.
+5.  **Resultado Final**: Ao final do processo, todos os objetos criados são exibidos de forma organizada na tela como um DataFrame do pandas, fornecendo uma visualização clara dos resultados da correspondência.
 
 ---
 
-## ✅ Funcionalidades
+### Entendendo a Biblioteca RapidFuzz e o "Match"
 
-1. Carrega duas planilhas:
+A correspondência de texto, ou "match", é um desafio quando os textos não são idênticos. O RapidFuzz resolve isso com algoritmos inteligentes.
 
-   * **Descrições**: contém coluna `Descrição`.
-   * **Medidas**: contém colunas `Descrição`, `Medida`, `Quantidade`.
-2. Botão **“Carregar Planilhas”**: permite ao usuário escolher ambos os arquivos Excel.
-3. Campo de busca: digite uma descrição (ex.: "cimento") e clique em **Buscar**.
-4. **Listbox** exibe até 10 materiais similares a partir da coluna `Descrição`.
-5. Clique sobre um item na lista para abrir calculadora.
-6. Nova janela com:
+#### O Papel de `rapidfuzz.process.extractOne`
 
-   * Seleção de **medida**.
-   * Entrada de **quantidade necessária**.
-   * Botão **Calcular** gera o número de unidades necessárias.
-7. Adiciona ao DataFrame de descrições:
+-   A função `process.extractOne` é a responsável por buscar a **melhor correspondência** (`one`) para uma string.
+-   Ela precisa de três informações principais:
+    1.  `descricao_ref`: A string que você quer encontrar (o item da planilha de referência).
+    2.  `descricoes_orcamento`: A lista de strings onde você vai procurar (todas as descrições da planilha de orçamento).
+    3.  `scorer`: O algoritmo de similaridade que será usado para a comparação.
 
-   * `Medida Utilizada`
-   * `Quantidade Calculada`
+#### Como Funciona o `fuzz.WRatio` (O Weighted Ratio)
 
----
+No nosso script, usamos o **`fuzz.WRatio`**. Este não é um algoritmo simples; é uma pontuação heurística avançada que combina várias métricas de similaridade. Ele é projetado para lidar com strings de comprimentos e formatos diferentes de forma mais eficaz do que métricas mais simples.
 
-## 📁 Estrutura do Código
+O `WRatio` leva em consideração:
 
-```text
-- import pandas as pd
-- import tkinter as tk
-- from tkinter import filedialog, messagebox, ttk
-- from difflib import get_close_matches
+-   **Similaridade de sub-strings**: Ele pontua alto se uma string é uma sub-string de outra (ex: "Instalação de Válvula" e "Válvula").
+-   **Similaridade de ordenação**: Ele penaliza menos por palavras fora de ordem.
+-   **Tamanho da string**: Ele ajusta a pontuação para evitar que strings muito curtas e idênticas recebam pontuações artificialmente altas.
 
-class SistemaMateriais:
-    __init__              # inicializa janela principal
-    criar_interface       # constrói a interface com botões e campos
-    carregar_planilhas     # carrega arquivos Excel via diálogo
-    buscar_material        # busca por similaridade na coluna 'Descrição'
-    selecionar_material    # abre janela de cálculo ao selecionar item na lista
-    calcular_quantidade    # calcula e atualiza os DataFrames
-```
+O resultado do `WRatio` é uma pontuação entre `0` e `100`, onde `100` significa uma correspondência perfeita.
 
-### Explicação OOP (Programação Orientada a Objetos)
+#### O Papel do `MATCH_THRESHOLD`
 
-* A classe `SistemaMateriais` encapsula todo o comportamento da aplicação.
-* O método `__init__` configura tudo ao iniciar (janela, variáveis de dados e interface).
-* Cada funcionalidade (interface, carregamento, busca, cálculo) é implementada como método independente — o que facilita manutenção e entendimento.
-* `self` refere-se ao objeto que mantém o estado da aplicação (como `self.df_descricoes`).
+O **`MATCH_THRESHOLD = 85`** é o nosso filtro de qualidade. Ele garante que o script só considere um "match" como válido se a pontuação de similaridade do `WRatio` for **igual ou superior a 85**. Isso evita que correspondências fracas ou incorretas sejam utilizadas, garantindo que apenas os resultados mais confiáveis sejam processados.
 
----
-
-## 🚀 Como Cada Parte Funciona
-
-### 1. Interface Gráfica (`criar_interface`)
-
-* Usa **Frame** para organizar os widgets.
-* **Button** com comando `self.carregar_planilhas`.
-* **Entry** para busca, inicialmente desativada (`state='disabled'`).
-* **Listbox** com scrollbar para mostrar resultados.
-* Ao selecionar um item, chama `selecionar_material` via evento `<<ListboxSelect>>`.
-
-#### Por que usar `ttk` e `messagebox`?
-
-* `ttk.Combobox` exige `from tkinter import ttk`.
-* Caixas de mensagem (`showinfo`, `showerror`) exigem `messagebox`.
-  Esses widgets fazem parte dos submódulos de Tkinter e precisam ser importados corretamente ([linuxconfig.org][1], [geeksforgeeks.org][2], [geeksforgeeks.org][3]).
-
----
-
-### 2. Carregamento das Planilhas (`carregar_planilhas`)
-
-* Usa `filedialog.askopenfilename` para abrir diálogo de seleção de arquivos.
-* Utiliza **pandas** (`pd.read_excel`) para ler os dados.
-* Após carregar com sucesso, ativa os widgets de busca.
-
-O uso de pandas permite acessar colunas como `df_descricoes['Descrição']`, transformando os textos para `lower()` e comparações.
-
----
-
-### 3. Busca Aproxima da Descrição (`buscar_material`)
-
-* Lê o texto digitado (`entry_busca`), converte para minúsculo e busca por similaridade com `get_close_matches`.
-* O parâmetro `cutoff=0.6` indica tolerância mínima de 60% de semelhança.
-* Retorna até 10 sugestões.
-* Lista de resultados preenchida na `Listbox`.
-
----
-
-### 4. Seleção e Cálculo (`selecionar_material` e `calcular_quantidade`)
-
-#### Seleção:
-
-* Captura o item clicado na lista.
-* Abre janela `Toplevel`, filtra no DataFrame `df_medidas` pela descrição selecionada.
-
-#### Cálculo:
-
-* Recupera medida escolhida (via `ttk.Combobox`) e quantidade desejada.
-* Calcula unidades necessárias como `quantidade_necessaria / quantidade_por_unidade` e arredonda para cima.
-* Atualiza `df_descricoes` adicionando colunas com `at[idx]`.
-* Exibe resultado em `messagebox.showinfo`.
-
----
-
-## 👩‍🏫 Explicação para Iniciantes
-
-* **Classe** é como um modelo de criação de programas: ela armazena dados (DataFrames) e ações (métodos).
-* **Métodos** são funções dentro da classe: cada tarefa tem seu próprio método.
-* **Self** é o objeto vivo da classe que guarda tudo: janela, dados, funções.
-* **Pandas** é como uma planilha dentro do programa: permite ler e processar dados facilmente.
-* **Tkinter** cria elementos visuais como botões, caixas de texto e janelas. É comum usar `grid()` ou `pack()` para organizar.
-* **Combobox** (via `ttk`) é uma caixa de seleção moderna.
-* **Get\_close\_matches** ajuda a encontrar descrições semelhantes mesmo se o texto não for exato.
-
----
-
-## 🧪 Como Usar
-
-1. Instale dependências:
-
-   ```bash
-   pip install pandas openpyxl
-   ```
-2. Execute o programa:
-
-   ```bash
-   python sistema_materiais.py
-   ```
-3. Na janela que aparece:
-
-   * Clique em **Carregar Planilhas** e selecione os arquivos Excel.
-   * Digite a descrição e clique em **Buscar**.
-   * Selecione o material na lista.
-   * Escolha a medida, digite a quantidade e clique em **Calcular**.
-
----
-
-## 🎓 Conceitos Aprendidos
-
-| Conceito          | Descrição simples                                           |
-| ----------------- | ----------------------------------------------------------- |
-| **Classe/Objeto** | Estrutura que junta dados e ações                           |
-| **Método**        | Função dentro de classe executa tarefa                      |
-| **Pandas**        | Biblioteca que lê Excel e manipula dados                    |
-| **Tkinter/ttk**   | Ferramenta para criar interface gráfica                     |
-| **Evento GUI**    | Ações como clicar, digitar ou selecionar disparando funções |
-
----
-
-## ✍️ Próximos Passos
-
-* Adicionar validação de colunas obrigatórias nas planilhas.
-* Salvar alterações (DataFrame) de volta para Excel.
-* Melhorar layout com `grid()` responsivo.
-* Adicionar temas modernos com `ttk.Style` ou bibliotecas como Sun‑Valley ([geeksforgeeks.org][4], [reddit.com][5]).
-
-
+A combinação de `extractOne`, `fuzz.WRatio` e o `MATCH_THRESHOLD` é o que permite ao seu script encontrar e processar as correspondências de forma robusta e precisa, mesmo em cenários com erros de digitação, pequenas variações ou diferenças na formatação do texto.
 [1]: https://linuxconfig.org/how-to-build-a-tkinter-application-using-an-object-oriented-approach?utm_source=chatgpt.com "How to build a Tkinter application using an object oriented approach"
 [2]: https://www.geeksforgeeks.org/git/what-is-readme-md-file/?utm_source=chatgpt.com "What is README.md File? - GeeksforGeeks"
 [3]: https://www.geeksforgeeks.org/python/python-gui-tkinter/?utm_source=chatgpt.com "Python Tkinter - GeeksforGeeks"
