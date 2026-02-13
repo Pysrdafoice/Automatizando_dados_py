@@ -1,62 +1,451 @@
-# Automatizando_dados_py(AUTALIZAÇÕES...)
+# 💰 Automação de Orçamento
 
-# Sistema de Cálculo de Materiais
-
-Uma aplicação em **Python** com interface gráfica que permite carregar planilhas Excel (descrições e medidas de materiais), buscar materiais por aproximação e calcular quantidades necessárias com base em medi‑das.
-
----
-
-## 🧭 Visão Geral
-
-Este projeto usa os seguintes recursos:
+**Data:** 12 de Fevereiro de 2026
+**Versão:** 2.1
+**Status:** Funcional com ordenação visual dinâmica
 
 ---
 
-### Automação de Correspondência de Planilhas com RapidFuzz
+# 📑 Índice
 
-Este script Python foi desenvolvido para automatizar a busca e extração de dados entre duas planilhas do Excel. Diferente de um preenchimento direto, ele age como um motor de busca, que percorre uma planilha de referência (`file_referencia`), encontra a melhor correspondência em uma planilha de orçamento (`file_orcamento`) e, para cada item encontrado, cria um objeto estruturado com as informações correspondentes.
-
-#### Como o Script Funciona: O Passo a Passo
-
-1.  **Configuração Inicial**: O script começa importando as bibliotecas `pandas` (para leitura e manipulação das planilhas) e `rapidfuzz` (para o algoritmo de correspondência de texto). Ele também define os caminhos dos arquivos e trata possíveis erros caso as planilhas não sejam encontradas.
-2.  **Preparação dos Dados**: As planilhas são lidas e carregadas em DataFrames do pandas. Em seguida, as descrições da **coluna B** de ambas as planilhas são extraídas em listas separadas. Essa etapa é crucial, pois essas listas são a base para a comparação de texto.
-3.  **Processo de Correspondência (O "Match")**: Este é o coração do script. O código percorre cada descrição da sua planilha de referência e busca a correspondência mais próxima na lista de descrições da planilha de orçamento.
-4.  **Criação dos Objetos**: Para cada correspondência que atende a um critério de similaridade, o script coleta os dados específicos (Descrição, Unidade de Medida, Valores, etc.) da linha correspondente na planilha de **referência** e armazena-os em um dicionário. Cada um desses dicionários é um "objeto" que contém as informações que você solicitou.
-5.  **Resultado Final**: Ao final do processo, todos os objetos criados são exibidos de forma organizada na tela como um DataFrame do pandas, fornecendo uma visualização clara dos resultados da correspondência.
+* [Visão Geral](#-visão-geral)
+* [Arquitetura do Sistema](#-arquitetura-do-sistema)
+* [Fluxo Principal](#-fluxo-principal)
+* [Detalhamento de Componentes](#-detalhamento-de-componentes)
+* [Sistema de Ordenação (v2.1)](#-sistema-de-ordenação-v21)
+* [Estrutura de Dados](#-estrutura-de-dados)
+* [Fluxo de Integração entre Arquivos](#-fluxo-de-integração-entre-arquivos)
+* [Processos Críticos](#-processos-críticos)
+* [Estados e Transições](#-estados-e-transições)
+* [Exemplo Completo de Execução](#-exemplo-completo-de-execução)
+* [Tratamento de Erros](#-tratamento-de-erros)
+* [Resumo de Funcionalidades](#-resumo-de-funcionalidades)
+* [Conclusão](#-conclusão)
+* [Histórico de Versões](#-histórico-de-versões)
 
 ---
 
-### Entendendo a Biblioteca RapidFuzz e o "Match"
+# 🎯 Visão Geral
 
-A correspondência de texto, ou "match", é um desafio quando os textos não são idênticos. O RapidFuzz resolve isso com algoritmos inteligentes.
+O sistema **Automação de Orçamento** é uma aplicação desktop desenvolvida com **Python + Tkinter** que automatiza o processo de correlação entre itens de orçamento e referências de preços.
 
-#### O Papel de `rapidfuzz.process.extractOne`
+Permite preenchimento automatizado com validação manual e atualização inteligente de planilhas Excel, preservando fórmulas existentes.
 
--   A função `process.extractOne` é a responsável por buscar a **melhor correspondência** (`one`) para uma string.
--   Ela precisa de três informações principais:
-    1.  `descricao_ref`: A string que você quer encontrar (o item da planilha de referência).
-    2.  `descricoes_orcamento`: A lista de strings onde você vai procurar (todas as descrições da planilha de orçamento).
-    3.  `scorer`: O algoritmo de similaridade que será usado para a comparação.
+## Objetivos Principais
 
-#### Como Funciona o `fuzz.WRatio` (O Weighted Ratio)
+* ✅ Correlacionar itens de orçamento com referências de preço
+* ✅ Exibir similaridade entre descrições
+* ✅ Permitir seleção manual de referências
+* ✅ Ordenar itens na grid superior (A→Z, por unidade, crescente/decrescente)
+* ✅ Confirmar seleções com interface de check-in
+* ✅ Atualizar planilha Excel com dados correlacionados
+* ✅ Preservar fórmulas Excel durante atualização
 
-No nosso script, usamos o **`fuzz.WRatio`**. Este não é um algoritmo simples; é uma pontuação heurística avançada que combina várias métricas de similaridade. Ele é projetado para lidar com strings de comprimentos e formatos diferentes de forma mais eficaz do que métricas mais simples.
+---
 
-O `WRatio` leva em consideração:
+# 🏗️ Arquitetura do Sistema
 
--   **Similaridade de sub-strings**: Ele pontua alto se uma string é uma sub-string de outra (ex: "Instalação de Válvula" e "Válvula").
--   **Similaridade de ordenação**: Ele penaliza menos por palavras fora de ordem.
--   **Tamanho da string**: Ele ajusta a pontuação para evitar que strings muito curtas e idênticas recebam pontuações artificialmente altas.
+## Camadas da Aplicação
 
-O resultado do `WRatio` é uma pontuação entre `0` e `100`, onde `100` significa uma correspondência perfeita.
+```
+Interface do Usuário
+(FormBuscaPlanilhas → TelaProcessamento → TelaCheckin)
+        ↓
+Processamento de Dados
+(ProcessamentoBase → Correlação + Agrupamento)
+        ↓
+Persistência (I/O)
+(Leitura Excel → Processamento → AtualizadorPlanilha)
+        ↓
+Configuração e Parâmetros
+(ParametrosProcessamento → ParametrosPlanilhas)
+```
 
-#### O Papel do `MATCH_THRESHOLD`
+## Stack Tecnológico
 
-O **`MATCH_THRESHOLD = 85`** é o nosso filtro de qualidade. Ele garante que o script só considere um "match" como válido se a pontuação de similaridade do `WRatio` for **igual ou superior a 85**. Isso evita que correspondências fracas ou incorretas sejam utilizadas, garantindo que apenas os resultados mais confiáveis sejam processados.
+| Componente    | Tecnologia              | Uso                          |
+| ------------- | ----------------------- | ---------------------------- |
+| GUI           | Tkinter (ttk)           | Interface gráfica            |
+| Processamento | Pandas                  | Leitura e manipulação Excel  |
+| Similaridade  | difflib.SequenceMatcher | Correlação textual           |
+| Excel Output  | openpyxl                | Escrita preservando fórmulas |
+| Configuração  | dataclasses             | Estruturação tipada          |
+| Versionamento | datetime                | Timestamp automático         |
 
-A combinação de `extractOne`, `fuzz.WRatio` e o `MATCH_THRESHOLD` é o que permite ao seu script encontrar e processar as correspondências de forma robusta e precisa, mesmo em cenários com erros de digitação, pequenas variações ou diferenças na formatação do texto.
-[1]: https://linuxconfig.org/how-to-build-a-tkinter-application-using-an-object-oriented-approach?utm_source=chatgpt.com "How to build a Tkinter application using an object oriented approach"
-[2]: https://www.geeksforgeeks.org/git/what-is-readme-md-file/?utm_source=chatgpt.com "What is README.md File? - GeeksforGeeks"
-[3]: https://www.geeksforgeeks.org/python/python-gui-tkinter/?utm_source=chatgpt.com "Python Tkinter - GeeksforGeeks"
-[4]: https://www.geeksforgeeks.org/python/python-tkinter-tutorial/?utm_source=chatgpt.com "Python Tkinter Tutorial - GeeksforGeeks"
-[5]: https://www.reddit.com/r/Python/comments/xbgyov/make_your_tkinter_app_look_truly_modern_with_a/?utm_source=chatgpt.com "Make your Tkinter app look truly modern with a single line of code!"
+---
+
+# 🔄 Fluxo Principal
+
+## 1️⃣ Inicialização
+
+* `main.py` executa
+* Abre `FormBuscaPlanilhas`
+
+## 2️⃣ Coleta de Parâmetros
+
+Usuário define:
+
+* Planilha de referência
+* Planilha de orçamento
+* Colunas relevantes
+* Intervalo de linhas
+* Taxa mínima de similaridade
+
+→ Gera `ParametrosProcessamento`
+
+---
+
+## 3️⃣ Processamento
+
+Classe: `ProcessamentoBase`
+
+### `processar_dados()`
+
+1. Converte índices de coluna (A→0, B→1...)
+2. Lê planilhas com Pandas
+3. Filtra intervalo
+4. Calcula similaridade entre descrições
+5. Retorna lista de correlações
+
+### Estrutura retornada:
+
+```python
+{
+    "item": "Parafuso M10",
+    "numero_linha": 5,
+    "unidade": "UN",
+    "referencia": "Parafuso Inox M10",
+    "similaridade": 0.92,
+    "valor_material": 12.50,
+    "valor_mao_de_obra": 2.30,
+    "valor_total": 14.80
+}
+```
+
+---
+
+## 4️⃣ Interface Principal — TelaProcessamento
+
+### Layout
+
+```
+Cabeçalho Azul
+Pesquisa
+Grid Superior (Itens do orçamento)
+Grid Inferior (Referências correlacionadas)
+Botões: [Finalizar] [Prosseguir]
+```
+
+### Eventos principais
+
+* `on_item_selecionado()`
+* `on_referencia_selecionada()`
+* `filtrar_itens()`
+* `ordenar_grid_superior()` (v2.1)
+* `prosseguir()`
+
+---
+
+# 🆕 Sistema de Ordenação (v2.1)
+
+## Estado de Ordenação
+
+```python
+estado_ordenacao = {
+    "coluna_ativa": None,
+    "direcao": "asc"
+}
+```
+
+## Função principal
+
+```python
+def ordenar_grid_superior(coluna: str):
+```
+
+### Regras
+
+* Clique na mesma coluna → inverte direção
+* Clique em coluna diferente → inicia ascendente
+* Ordenação case-insensitive
+* Apenas visual (não reprocessa dados)
+
+### Tipos
+
+* `"item"` → alfabético
+* `"unidade"` → alfabético
+* `"qty"` → numérico
+
+---
+
+# 📊 Estrutura de Dados
+
+## Entrada
+
+```python
+ParametrosProcessamento
+```
+
+## Intermediário
+
+Lista de dicts com correlações.
+
+## Agrupado
+
+```python
+{
+  "Item A": [{...}, {...}],
+  "Item B": [{...}]
+}
+```
+
+## Seleção do Usuário
+
+```python
+{
+  "Item A": "Referência X"
+}
+```
+
+## Confirmado
+
+```python
+List[ItemCheckin]
+```
+
+---
+
+# 🔧 Detalhamento de Componentes
+
+## FormBuscaPlanilhas
+
+Responsável por coletar:
+
+* Caminhos das planilhas
+* Abas
+* Colunas
+* Intervalo
+* Taxa de similaridade
+
+---
+
+## ProcessamentoBase
+
+Responsável por:
+
+* Ler planilhas
+* Calcular similaridade
+* Agrupar resultados
+
+---
+
+## ItemCheckin
+
+```python
+@dataclass
+class ItemCheckin:
+    item: str
+    unidade: str
+    referencia: str
+    similaridade: float
+    valor_total: float
+    numero_linha: int
+    valor_material: float
+    valor_mao_de_obra: float
+```
+
+---
+
+## TelaCheckin
+
+Permite:
+
+* Revisão dos itens
+* Exclusão via double-click
+* Resumo total
+* Finalização do preenchimento
+
+---
+
+## AtualizadorPlanilha
+
+Responsável por:
+
+* Carregar Excel com openpyxl
+* Atualizar células específicas
+* Preservar fórmulas
+* Gerar arquivo com timestamp
+
+Exemplo de saída:
+
+```
+orc_PREENCHIDA_20260110_143025.xlsx
+```
+
+---
+
+# ⚙️ Processos Críticos
+
+## 1️⃣ Similaridade
+
+```python
+SequenceMatcher(None, a.lower(), b.lower()).ratio()
+```
+
+---
+
+## 2️⃣ Conversão de Coluna Excel
+
+```python
+"A" → 0
+"B" → 1
+"AA" → 26
+```
+
+---
+
+## 3️⃣ Mapeamento Pandas → Excel
+
+```python
+numero_linha = idx_orc + 3
+```
+
+---
+
+## 4️⃣ Preservação de Fórmulas
+
+Uso correto:
+
+```python
+wb = load_workbook(caminho)
+ws.cell(row=5, column=3).value = 12.50
+```
+
+Fórmulas são mantidas intactas pelo openpyxl.
+
+---
+
+# 🔁 Estados e Transições
+
+## TelaProcessamento
+
+```
+Inicial
+↓
+Grid Ordenada
+↓
+Direção Invertida
+↓
+Item Selecionado
+↓
+Referência Selecionada
+↓
+Abrir Checkin
+```
+
+## TelaCheckin
+
+```
+Exibição
+↓
+Exclusão (double-click)
+↓
+Finalizar
+↓
+Atualização Excel
+↓
+Finalizado
+```
+
+---
+
+# 📈 Exemplo Completo de Execução
+
+## Entrada
+
+Planilha Referência:
+
+| Descrição    | Material | MO   |
+| ------------ | -------- | ---- |
+| Parafuso M10 | 10.00    | 2.00 |
+
+Planilha Orçamento:
+
+| Item         | Unidade |
+| ------------ | ------- |
+| Parafuso M10 | UN      |
+
+## Processamento
+
+Similaridade ≥ 80%
+
+## Seleção
+
+Usuário escolhe referência.
+
+## Resultado
+
+Planilha preenchida automaticamente com:
+
+| Item         | Un | Material | MO   | Total |
+| ------------ | -- | -------- | ---- | ----- |
+| Parafuso M10 | UN | 10.00    | 2.00 | 12.00 |
+
+---
+
+# 🛡 Tratamento de Erros
+
+| Cenário                 | Ação          |
+| ----------------------- | ------------- |
+| Arquivo não encontrado  | Dialog erro   |
+| Coluna inválida         | Debug + aviso |
+| Planilha vazia          | Aviso         |
+| Nenhuma correlação      | Aviso         |
+| Sem seleções            | Bloqueio      |
+| Cancelamento salvamento | Tratado       |
+
+---
+
+# 📊 Resumo de Funcionalidades
+
+| Funcionalidade        | Status   |
+| --------------------- | -------- |
+| Seleção de arquivos   | ✅        |
+| Processamento         | ✅        |
+| Exibição em grids     | ✅        |
+| Filtragem             | ✅        |
+| Ordenação dinâmica    | ✅ (v2.1) |
+| Exclusão com callback | ✅        |
+| Atualização Excel     | ✅        |
+| Preservação fórmulas  | ✅        |
+| Versionamento arquivo | ✅        |
+
+---
+
+# 🎯 Conclusão
+
+O sistema funciona como um pipeline estruturado:
+
+```
+Coleta → Processamento → Validação → Atualização Excel
+```
+
+A versão 2.1 introduz ordenação visual dinâmica, melhorando significativamente a experiência do usuário sem impactar o desempenho do processamento.
+
+O uso de `@dataclass` torna o código mais seguro, legível e sustentável.
+
+---
+
+# 📝 Histórico de Versões
+
+| Versão | Data       | Mudanças                             |
+| ------ | ---------- | ------------------------------------ |
+| 1.0    | 01/01/2026 | Processamento base                   |
+| 2.0    | 10/01/2026 | Refatoração com ItemCheckin          |
+| 2.1    | 12/02/2026 | Sistema de ordenação visual dinâmica |
+
+---
+
+**Autor:** Anderson
+**Versão do Documento:** 2.1
+**Última Atualização:** 12 de Fevereiro de 2026.
